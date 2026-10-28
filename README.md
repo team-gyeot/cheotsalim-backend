@@ -2,6 +2,8 @@
 
 첫살림 백엔드. Java 21 / Spring Boot 4.1.2 / PostgreSQL.
 
+개발 스택·시스템 구성도·민관협력 지원 플랫폼 활용 자원은 [개발 환경 및 시스템 구성](docs/development-environment.md)에 정리했다.
+
 현재 배포 목표는 `인터넷 → Nginx:80 → 127.0.0.1:8080 → Cloud DB:5432`의 연결 확인이다.
 DB는 기존 Cloud DB를 사용하며 Compose로 별도 DB를 만들지 않는다.
 
