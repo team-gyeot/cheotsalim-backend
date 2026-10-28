@@ -1,0 +1,16 @@
+[Interface]
+Address = 10.203.0.1/32
+ListenPort = 51820
+PrivateKey = REPLACE_WITH_SERVER_PRIVATE_KEY
+
+# Allow only SSH to this host, including when Docker enables IP forwarding.
+PostUp = iptables -I INPUT 1 -i %i -j DROP
+PostUp = iptables -I INPUT 1 -i %i -s 10.203.0.2/32 -d 10.203.0.1/32 -p tcp --dport 22 -j ACCEPT
+PostUp = iptables -I FORWARD 1 -i %i -j DROP
+PreDown = iptables -D FORWARD -i %i -j DROP
+PreDown = iptables -D INPUT -i %i -s 10.203.0.2/32 -d 10.203.0.1/32 -p tcp --dport 22 -j ACCEPT
+PreDown = iptables -D INPUT -i %i -j DROP
+
+[Peer]
+PublicKey = REPLACE_WITH_CLIENT_PUBLIC_KEY
+AllowedIPs = 10.203.0.2/32

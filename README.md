@@ -115,7 +115,28 @@ Linux에서는 `sh ./gradlew test bootJar`를 사용한다.
 테스트는 DB 성공·실패 응답과 경로/메서드 접근 제한을 MockMvc 및 모의 JDBC로 검증하며 실제 PostgreSQL 접속을 대신하지 않는다.
 직접 `bootRun`할 때는 DB 변수를 셸/IDE 환경 변수로 설정해야 한다. Spring Boot는 `.env`를 자동으로 읽지 않는다.
 
-## 5. 기능 개발 및 실제 데이터 사용 전
+## 5. 이후 배포와 CI/CD
+
+CI/CD 설정과 최초 연결은 [CI/CD 안내](deploy/CICD.md)를 따른다.
+기본 개발 브랜치는 develop이며, develop/main 대상 PR과 두 브랜치 push에서 CI를 실행한다.
+연결 후 develop push의 CI가 성공하면 GitHub 기본 러너가 WireGuard 터널을 통해 SSH로 즉시 배포를 시작한다.
+main push와 PR에서는 CI만 실행한다. main PR 병합은 배포 조건이 아니다.
+별도 러너 서버나 고정 IP 러너는 필요 없다. 기존 앱 서버에 WireGuard를 한 번 설정하고 GitHub Secrets를 등록한다.
+`DEPLOY_ENABLED=true`를 설정하기 전에는 CI만 동작한다. 배포 결과는 GitHub Actions의 deploy 작업에서 확인한다.
+
+자동 배포가 비활성화된 동안의 수동 업데이트는 **서버 SSH 터미널**에서 실행한다.
+GitHub 자동 배포를 사용 중이라면 먼저 `DEPLOY_ENABLED=false`로 설정하고 진행 중인 배포가 끝났는지 확인한다.
+`.env` 생성과 Nginx 최초 설정은 반복하지 않는다.
+서버 저장소는 develop 브랜치를 사용한다. 새로 clone할 때도 `git clone --branch develop https://github.com/team-gyeot/cheotsalim-backend.git`으로 지정한다.
+
+```bash
+cd ~/cheotsalim-backend
+git pull --ff-only origin develop
+sudo docker compose up -d --build --wait --wait-timeout 180
+curl -i http://127.0.0.1/api/health
+```
+
+## 6. 기능 개발 및 실제 데이터 사용 전
 
 현재 공개 경로는 `GET /api/health`뿐이며 다른 경로는 인증 여부와 관계없이 차단한다. CSRF 보호는 유지한다.
 기능 API와 프론트 도메인이 정해지면 인증·인가와 허용할 CORS origin을 함께 설계한다. Swagger UI/API 문서는 현재 비활성화했다.

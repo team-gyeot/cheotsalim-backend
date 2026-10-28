@@ -1,0 +1,99 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Check deployment script
+        run: bash deploy/deploy.test.sh
+      - name: Test and build
+        run: sh ./gradlew --no-daemon test bootJar
+
+  deploy:
+    needs: build
+    if: >-
+      github.ref == 'refs/heads/develop' &&
+      github.event_name != 'pull_request' &&
+      vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: development
+    timeout-minutes: 20
+    concurrency:
+      group: develop-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6.1.0
+        with:
+          persist-credentials: false
+      - name: Install WireGuard
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends wireguard-tools
+      - name: Connect deployment VPN
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          WG_CLIENT_PRIVATE_KEY: ${{ secrets.WG_CLIENT_PRIVATE_KEY }}
+          WG_SERVER_PUBLIC_KEY: ${{ secrets.WG_SERVER_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_HOST:?Set development secret DEPLOY_HOST}"
+          : "${WG_CLIENT_PRIVATE_KEY:?Set development secret WG_CLIENT_PRIVATE_KEY}"
+          : "${WG_SERVER_PUBLIC_KEY:?Set development secret WG_SERVER_PUBLIC_KEY}"
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$WG_CLIENT_PRIVATE_KEY" =~ ^[a-zA-Z0-9+/]{43}=$ ]]
+          [[ "$WG_SERVER_PUBLIC_KEY" =~ ^[a-zA-Z0-9+/]{43}=$ ]]
+          umask 077
+          config=$(mktemp)
+          trap 'rm -f "$config"' EXIT
+          printf '[Interface]\nPrivateKey = %s\nAddress = 10.203.0.2/32\n\n[Peer]\nPublicKey = %s\nAllowedIPs = 10.203.0.1/32\nEndpoint = %s:51820\nPersistentKeepalive = 25\n' \
+            "$WG_CLIENT_PRIVATE_KEY" "$WG_SERVER_PUBLIC_KEY" "$DEPLOY_HOST" > "$config"
+          sudo install -d -m 700 /etc/wireguard
+          sudo install -m 600 "$config" /etc/wireguard/wg-ci.conf
+          sudo wg-quick up wg-ci
+      - name: Deploy over SSH
+        shell: bash
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_SSH_KEY:?Set development secret DEPLOY_SSH_KEY}"
+          : "${DEPLOY_KNOWN_HOSTS:?Set development secret DEPLOY_KNOWN_HOSTS}"
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          key=$(mktemp)
+          hosts=$(mktemp)
+          trap 'rm -f "$key" "$hosts"' EXIT
+          chmod 600 "$key" "$hosts"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$hosts"
+          ssh -F /dev/null -T -i "$key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$hosts" \
+            -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+            deploy@10.203.0.1 "bash -s -- $GITHUB_SHA" < deploy/deploy.sh
+      - name: Disconnect deployment VPN
+        if: always()
+        run: |
+          sudo wg-quick down wg-ci 2>/dev/null || true
+          sudo rm -f /etc/wireguard/wg-ci.conf
+

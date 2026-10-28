@@ -42,3 +42,4 @@ out/
 !.env.example
 *.pem
 *.key
+/deploy/wireguard/*.conf
