@@ -70,6 +70,8 @@ jobs:
           sudo install -d -m 700 /etc/wireguard
           sudo install -m 600 "$config" /etc/wireguard/wg-ci.conf
           sudo wg-quick up wg-ci
+      - name: Verify VPN handshake
+        run: bash deploy/check-vpn.sh
       - name: Deploy over SSH
         shell: bash
         env:

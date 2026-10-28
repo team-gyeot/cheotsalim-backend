@@ -225,6 +225,7 @@ build와 deploy가 성공하고 외부에서도 `/api/health`가 200인지 확�
 문제 확인:
 
 - VPN/SSH timeout: ACG·NACL·UFW의 UDP 통신, 공인 IP, 양쪽 WireGuard 키와 `sudo wg show wg-ci` 확인.
+- Verify VPN handshake 실패: 이 단계는 실제 handshake를 확인하며 실패 시 러너의 터널 경로·endpoint·송수신 통계를 출력한다. 서버에서 `sudo tcpdump -ni any -nn 'udp port 51820'`을 계속 실행해 둔 상태로 재실행하여 수신 여부를 비교한다. 서버 수신이 없다면 development 환경의 DEPLOY_HOST와 실제 앱 서버 NIC의 ACG·서브넷 NACL을 먼저 확인한다. 단, 러너의 전송 여부도 함께 확인해야 한다.
 - SSH Permission denied: 전용 공개키와 from 주소, deploy 사용자 확인.
 - Host key verification failed: 신뢰할 서버에서 호스트 키 확인. 검증 비활성화로 우회하지 않는다.
 - sudo password required: sudoers와 스크립트 명령이 정확히 일치하는지 확인.

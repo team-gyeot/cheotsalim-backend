@@ -2,7 +2,9 @@
 set -euo pipefail
 
 script=$(cd "$(dirname "$0")" && pwd)/deploy.sh
+vpn_script=$(cd "$(dirname "$0")" && pwd)/check-vpn.sh
 bash -n "$script"
+bash -n "$vpn_script"
 temp_root=$(cd "${TMPDIR:-/tmp}" && pwd)
 work=$(mktemp -d "$temp_root/cheotsalim-deploy-test.XXXXXX")
 [[ "$work" == "$temp_root"/cheotsalim-deploy-test.* ]]
@@ -67,4 +69,21 @@ if bash "$script" "$remote_sha" > /dev/null 2>&1; then exit 1; fi
 ! grep -q '^sudo$' "$CALL_LOG"
 
 if bash "$script" invalid > /dev/null 2>&1; then exit 1; fi
+
+# VPN verification must reject missing, invalid and never-completed handshakes.
+cat > "$work/bin/sudo" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == 'wg show wg-ci latest-handshakes' && -n "${MOCK_HANDSHAKE:-}" ]]; then
+    printf 'test-peer\t%s\n' "$MOCK_HANDSHAKE"
+fi
+exit 0
+EOF
+for command in timeout sleep ip; do
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$work/bin/$command"
+    chmod +x "$work/bin/$command"
+done
+MOCK_HANDSHAKE=123 bash "$vpn_script" > /dev/null
+for handshake in 0 invalid ''; do
+    if MOCK_HANDSHAKE="$handshake" bash "$vpn_script" > /dev/null 2>&1; then exit 1; fi
+done
 echo 'Deployment checks passed'
