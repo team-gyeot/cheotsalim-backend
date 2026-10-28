@@ -1,0 +1,23 @@
+services:
+  backend:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      DB_HOST: ${DB_HOST:?Set DB_HOST in .env}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-cheotsalim}
+      DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME in .env}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--max-time", "15", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 20s
+      start_period: 60s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
